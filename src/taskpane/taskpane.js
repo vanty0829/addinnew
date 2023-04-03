@@ -4,8 +4,11 @@
  */
 
 /* global console, document, Excel, Office */
+const axios = require('axios')
+// import axios from '../../axios'
 let range_change = {}
 let format_x
+
 Office.onReady(async (info) => {
 
   if (info.host === Office.HostType.Excel) {
@@ -15,14 +18,14 @@ Office.onReady(async (info) => {
     document.getElementById("create-table").onclick = () => tryCatch(createTable);
     document.getElementById("save").onclick = () => tryCatch(saveEvent);
     await Excel.run(async (context) => {
-      const worksheet = context.workbook.worksheets.getActiveWorksheet();
+      const worksheet = context.workbook.worksheets;
       console.log('aa')
       worksheet.onChanged.add(handleChange);
       worksheet.onActivated.add(handleChange);
-      let range = worksheet.getRange('A2')
-      range.load('format/fill/color , format/borders')
+      // let range = worksheet.getRange('A2')
+      // range.load('format/fill/color , format/borders')
       await context.sync();
-      format_x = range.format
+      // format_x = range.format
     });
 
     await Excel.run(async (context) => {
@@ -32,6 +35,7 @@ Office.onReady(async (info) => {
     });
   }
 });
+
 
 let onWorksheetAdd = async (event) => {
   console.log(event)
@@ -49,22 +53,47 @@ let onWorksheetAdd = async (event) => {
 
 let saveEvent = async () => {
   await Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getActiveWorksheet();
-    console.log(sheet)
+    // const sheet = context.workbook.worksheets.getActiveWorksheet();
+    // console.log(sheet)
 
-    await context.sync();
-    console.log(sheet['id'])
-    for (let i in range_change[sheet._I]) {
-      console.log(i)
-      console.log(format_x)
-      range = sheet.getRange(i);
-      range.format.fill.clear()
-      await context.sync();
+    // await context.sync();
+    // console.log(sheet['id'])
+    for (let j in range_change) {
+      for (let i in range_change[j]) {
+        let sheet = context.workbook.worksheets.getItem(j);
+        console.log(sheet)
+        console.log(i)
+        console.log(format_x)
+        range = sheet.getRange(i);
+        range.format.font.color = "black"
+
+        await context.sync();
+
+      }
     }
+
   });
+  range_change = {}
+}
+
+const getData = async () => {
+  try {
+    return await axios.get('http://localhost:8090/mssql', {
+      params: {
+        query: `select * from dbo.react_app`,
+        token: 123456
+      },
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    console.error(error)
+  }
 }
 
 async function handleChange(event) {
+  let Data = await getData()
+  console.log(Data['data']['data'])
   await Excel.run(async (context) => {
     await context.sync();
     var ws_id = event.worksheetId
@@ -84,30 +113,47 @@ async function handleChange(event) {
 
     const range = sheet.getRange(event['address']);
     range.load('format')
+    // range.load('format/font')
     await context.sync();
     console.log(range)
 
     console.log('bbb')
-    if (event['address'].includes(":")) {
-      console.log('aaa')
-      range_change[ws_id][event['address']] = 1
-      await context.sync();
-      range.format.fill.color = "#ff0000"
 
-    } else if (event['details']['valueBefore'] != event['details']['valueAfter']) {
-      console.log('testa')
-      if (!range_change[ws_id]) {
+    await context.sync();
+    console.log(event['address'])
+    if (event['address']) {
+      range.format.font.color = "#ff0000"
+      if (range_change[ws_id]) {
+        range_change[ws_id][event['address']] = 1
+      } else {
         range_change[ws_id] = {}
+        range_change[ws_id][event['address']] = 1
       }
-      range_change[ws_id][event['address']] = 1
-      await context.sync();
-      range.format.fill.color = "#ff0000"
-      await context.sync();
     }
 
+
+    // await context.sync();
+    // if (event['address'].includes(":")) {
+    //   console.log('aaa')
+    //   range_change[ws_id][event['address']] = 1
+    //   // await context.sync();
+
+    //   // range.format.fill.color = "#ff0000"
+    //   range.format.font.color = "#ff0000"
+    //   await context.sync();
+    // } else if (event['details']['valueBefore'] != event['details']['valueAfter']) {
+    //   console.log('testa')
+    //   if (!range_change[ws_id]) {
+    //     range_change[ws_id] = {}
+    //   }
+    //   range_change[ws_id][event['address']] = 1
+    //   await context.sync();
+    //   // range.format.fill.color = "#ff0000"
+    //   range.format.font.color = "#ff0000"
+    //   await context.sync();
+    // }
+
     console.log(range_change)
-
-
 
     // You can use empty JSON objects to avoid changing a cell's properties.
 
@@ -121,9 +167,10 @@ async function createTable() {
 
     const currentWorksheet = context.workbook.worksheets.getActiveWorksheet();
     currentWorksheet.load('name')
+    await context.sync();
     console.log(currentWorksheet)
     const expensesTable = currentWorksheet.tables.add("A1:D1", true /*hasHeaders*/);
-    expensesTable.name = currentWorksheet._N + "_ExpensesTable";
+    expensesTable.name = currentWorksheet.name + "_ExpensesTable";
 
     expensesTable.getHeaderRowRange().values =
       [["Date", "Merchant", "Category", "Amount"]];
@@ -137,7 +184,7 @@ async function createTable() {
       ["1/15/2017", "Trey Research", "Other", "135"],
       ["1/15/2017", "Best For You Organics Company", "Groceries", "97.88"]
     ]);
-
+    expensesTable.rows.deleteRows()
     expensesTable.columns.getItemAt(3).getRange().numberFormat = [['\u20AC#,##0.00']];
     expensesTable.getRange().format.autofitColumns();
     expensesTable.getRange().format.autofitRows();
